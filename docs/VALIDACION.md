@@ -1,5 +1,21 @@
 # Validación del proyecto
 
+## Completar una base con administrador existente — 24 de noviembre de 2026
+
+Se corrigió la importación privada para insertar **cada cuenta que falte por su username**, conservando contraseña, rol y estado de las cuentas existentes. La versión anterior omitía ambas cuentas si había cualquier usuario; por eso una instalación con administrador previo no recibía al bodeguero. La comparación de usernames normaliza explícitamente la intercalación UTF-8 para evitar conflictos entre variables de sesión y columnas de la base.
+
+La importación privada también puede completar los catálogos de ejemplo y `DEMO-001` sobre una base que ya tenga datos. Cada ejemplo se comprueba por nombre o código antes de insertarlo. El arranque automático conserva la política de cargar ejemplos únicamente si los cuatro catálogos están vacíos.
+
+Se creó un respaldo privado y se ejecutó el SQL sobre la base real `inventario_bodega` del puerto **3307**. Se verificó que todos los registros previos, incluida la contraseña del administrador, el producto existente con stock 5 y su entrada, permanecieran iguales. La carga añadió al bodeguero, los catálogos faltantes y un único `DEMO-001` con stock 0. Una segunda importación no alteró ni duplicó registros.
+
+Estado comprobado después de la carga: **2 usuarios, 4 categorías, 3 marcas, 3 proveedores, 2 productos y 1 entrada**. Esos totales incluyen los datos propios que ya existían; el SQL no reinició el inventario ni eliminó movimientos.
+
+Se agregó una prueba de regresión que importa dos veces sobre un administrador existente y comprueba que se cree el usuario faltante sin cambiar al administrador. `RUN_DB_TESTS=true` y `mvnw.cmd -B clean verify` finalizaron con **36 aprobadas** (11 unitarias y 25 de integración), **0 fallos, 0 errores y 0 omitidas**, y generaron el JAR actualizado.
+
+Se inició el JAR temporalmente en el puerto 18080 contra la base real del puerto 3307. Las dos contraseñas privadas se comprobaron mediante el formulario de login de Spring Security: ambos usuarios accedieron al inventario, ADMIN accedió a usuarios y BODEGUERO recibió 403. La aplicación temporal se detuvo después; XAMPP conserva su proceso original.
+
+El respaldo, el resultado de la carga y los logs se conservan en `.local/`, excluidos de Git. Las contraseñas iniciales son texto de acceso guardado en el archivo privado; los valores BCrypt de `usuarios.password` son hashes que no se escriben en el login.
+
 ## Importación completa y datos iniciales — 16 de noviembre de 2026
 
 `schema.sql` ahora crea `inventario_bodega`, selecciona esa base, crea las seis tablas y carga los datos iniciales cuando los catálogos están vacíos. Incluye las instrucciones para insertar las dos cuentas cuando recibe sus hashes privados. El generador `scripts/preparar-importacion.ps1` combina las cuentas privadas con ese mismo archivo; no mantiene un esquema duplicado ni publica claves.

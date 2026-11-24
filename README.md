@@ -71,6 +71,8 @@ Se generan dos archivos dentro de `.local/`, ambos ignorados por Git:
 - **`importar-inventario.sql`**: crea la base `inventario_bodega`, las seis tablas, los datos iniciales y las cuentas ADMIN y BODEGUERO con hashes BCrypt.
 - **`credenciales-importacion.properties`**: guarda los usuarios y contraseñas para iniciar sesión. El administrador usa la clave local configurada; el bodeguero recibe una clave aleatoria propia de esa instalación.
 
+Las claves de ese archivo son **contraseñas reales para escribir o pegar en el login**, aunque contengan letras aleatorias, `/` o `+`. En cambio, el campo `usuarios.password` de la base contiene un **hash BCrypt** que comienza por `$2a$`, `$2b$` o `$2y$`: ese hash no se introduce como contraseña en el formulario.
+
 Encienda también **Apache** en XAMPP y abra **http://localhost/phpmyadmin** (ajuste el puerto de Apache si corresponde). Desde la página principal del servidor, entre en **Importar**, seleccione **`.local/importar-inventario.sql`**, mantenga el formato **SQL** y la codificación **utf-8**, y ejecute la importación. **No necesita crear ni seleccionar la base previamente**: el archivo incluye `CREATE DATABASE` y `USE inventario_bodega`.
 
 Después, seleccione `inventario_bodega` en el panel izquierdo y compruebe las seis tablas. La sección **Base de datos e importación completa en phpMyAdmin** explica los registros creados, la importación directa de `schema.sql` y qué ocurre si la base ya contiene información.
@@ -206,7 +208,11 @@ En una base sin información previa, la importación completa deja:
 
 **Si importa directamente `src/main/resources/schema.sql`**, se crean igualmente la base, las tablas, los catálogos, los proveedores y el producto. Las cuentas se omiten porque el archivo público no contiene hashes de contraseñas universales: el administrador se creará al iniciar Java con la configuración local y podrá crear al bodeguero desde **Usuarios**. Para importar también ambas cuentas en un solo paso, use el SQL generado de `.local/`.
 
-Si ya hay datos, el SQL no borra ni actualiza registros existentes. Los ejemplos se insertan solamente cuando **categorías, marcas, proveedores y productos están todos vacíos**. Los dos usuarios se insertan solamente si **`usuarios` está vacía** y el SQL tiene los hashes privados de ambas cuentas. Por tanto, repetir una importación o reiniciar Spring conserva nombres editados, contraseñas, stock, entradas y productos desactivados. No se repone un ejemplo eliminado si todavía quedan otros datos en esos cuatro catálogos.
+Si ya hay datos, el SQL no borra ni actualiza registros existentes. **Cada usuario se inserta por separado si falta su nombre de usuario** y el SQL recibe los hashes privados válidos. Si ya existe `administrador`, la importación puede crear `bodeguero` sin cambiar la contraseña, el rol ni el estado del administrador. Las cuentas existentes conservan sus claves: el archivo local no recupera una contraseña que se haya cambiado posteriormente desde la aplicación.
+
+La importación privada generada solicita **completar los ejemplos faltantes**, buscando categorías, marcas y proveedores por nombre y el producto por código `DEMO-001`. Por eso también funciona sobre una base con datos propios: añade los ejemplos que falten y conserva los productos, stock y entradas existentes. Si ejecuta de nuevo esa importación manual, puede restaurar un ejemplo `DEMO` que hubiera eliminado o renombrado; no modifica registros ya encontrados. En cambio, el arranque automático con el `schema.sql` público solo carga ejemplos cuando **categorías, marcas, proveedores y productos están todos vacíos**, para no reponerlos en cada reinicio.
+
+Si ya había arrancado Java y ve solamente al administrador en la tabla `usuarios`, ejecute otra vez `scripts/preparar-importacion.ps1` e importe el nuevo `.local/importar-inventario.sql`: ahora se completa la cuenta que falta aunque la tabla tenga usuarios.
 
 Spring ejecuta este mismo `schema.sql` al iniciar. Hibernate usa **`ddl-auto=validate`**: comprueba las correspondencias, sin crear ni modificar tablas por su cuenta. No cambie esta propiedad a `create` o `create-drop`. [`database/crear-base.sql`](database/crear-base.sql) queda como opción para preparar únicamente la base y sus permisos; **no es un paso previo obligatorio** para importar el SQL completo.
 
@@ -385,7 +391,7 @@ Las pruebas de integración crean datos identificados con un prefijo aleatorio `
 
 Los informes detallados de la última ejecución están en `target/surefire-reports/`. El resultado final y las comprobaciones HTTP/navegador se registran también en [`docs/VALIDACION.md`](docs/VALIDACION.md).
 
-Última ejecución, **16 de noviembre de 2026**, con `jdbc:mysql` y MySQL Connector/J sobre XAMPP: **35 pruebas aprobadas** (11 unitarias y 24 de integración), **0 fallos, 0 errores y 0 omitidas**. `clean verify` generó el JAR actualizado. Los detalles y la comprobación previa en Chrome están en `docs/VALIDACION.md`.
+Última ejecución, **24 de noviembre de 2026**, con `jdbc:mysql` y MySQL Connector/J sobre XAMPP: **36 pruebas aprobadas** (11 unitarias y 25 de integración), **0 fallos, 0 errores y 0 omitidas**. Incluyen la importación sobre un administrador ya existente, completando la cuenta faltante sin alterar sus datos. `clean verify` generó el JAR actualizado. Los detalles y la comprobación previa en Chrome están en `docs/VALIDACION.md`.
 
 La nueva importación completa también se verificó desde cero en un servidor temporal independiente: seis tablas, los datos iniciales indicados, un único producto con stock cero, cuentas BCrypt que autentican correctamente y reimportaciones que conservan los datos existentes.
 

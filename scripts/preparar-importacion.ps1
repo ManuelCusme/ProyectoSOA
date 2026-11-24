@@ -93,6 +93,7 @@ foreach ($hash in @($hashes.admin, $hashes.bodeguero)) {
 
 $cabeceraPrivada = @"
 -- ARCHIVO PRIVADO: no publicar. Contiene hashes para las cuentas de esta instalacion.
+SET @completar_ejemplos_iniciales = 1;
 SET @usuario_admin_inicial = '$usuarioAdmin';
 SET @hash_admin_inicial = '$($hashes.admin)';
 SET @usuario_bodeguero_inicial = '$UsuarioBodeguero';

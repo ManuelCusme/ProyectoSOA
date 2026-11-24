@@ -6,7 +6,7 @@
 CREATE DATABASE IF NOT EXISTS inventario_bodega
  CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE inventario_bodega;
-SET NAMES utf8mb4;
+SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS usuarios (
  id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -45,34 +45,42 @@ CREATE TABLE IF NOT EXISTS entradas_inventario (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- DATOS INICIALES DE EJEMPLO, exclusivamente para practicar con el sistema.
--- Se cargan solo si los cuatro catálogos están vacíos. Una nueva importación
--- o un reinicio conserva los cambios y no repone ejemplos eliminados parcialmente.
-SET @cargar_ejemplos =
+-- El arranque automático solo carga ejemplos cuando los catálogos están vacíos.
+-- La importación privada puede pedir completar los ejemplos faltantes.
+-- Cada fila se busca por nombre/código y nunca se actualizan datos existentes.
+SET @cargar_ejemplos = COALESCE(@completar_ejemplos_iniciales,
  NOT EXISTS (SELECT 1 FROM categorias) AND
  NOT EXISTS (SELECT 1 FROM marcas) AND
  NOT EXISTS (SELECT 1 FROM proveedores) AND
- NOT EXISTS (SELECT 1 FROM productos);
+ NOT EXISTS (SELECT 1 FROM productos));
 
 START TRANSACTION;
 
 INSERT INTO categorias (nombre)
-SELECT 'DEMO - Papelería' WHERE @cargar_ejemplos;
+SELECT 'DEMO - Papelería' WHERE @cargar_ejemplos
+ AND NOT EXISTS (SELECT 1 FROM categorias WHERE nombre = 'DEMO - Papelería');
 INSERT INTO categorias (nombre)
-SELECT 'DEMO - Herramientas' WHERE @cargar_ejemplos;
+SELECT 'DEMO - Herramientas' WHERE @cargar_ejemplos
+ AND NOT EXISTS (SELECT 1 FROM categorias WHERE nombre = 'DEMO - Herramientas');
 INSERT INTO categorias (nombre)
-SELECT 'DEMO - Limpieza' WHERE @cargar_ejemplos;
+SELECT 'DEMO - Limpieza' WHERE @cargar_ejemplos
+ AND NOT EXISTS (SELECT 1 FROM categorias WHERE nombre = 'DEMO - Limpieza');
 
 INSERT INTO marcas (nombre)
-SELECT 'DEMO - Genérica' WHERE @cargar_ejemplos;
+SELECT 'DEMO - Genérica' WHERE @cargar_ejemplos
+ AND NOT EXISTS (SELECT 1 FROM marcas WHERE nombre = 'DEMO - Genérica');
 INSERT INTO marcas (nombre)
-SELECT 'DEMO - Oficina' WHERE @cargar_ejemplos;
+SELECT 'DEMO - Oficina' WHERE @cargar_ejemplos
+ AND NOT EXISTS (SELECT 1 FROM marcas WHERE nombre = 'DEMO - Oficina');
 
 INSERT INTO proveedores (nombre, telefono, correo)
 SELECT 'DEMO - Proveedor de oficina', NULL, 'oficina@example.invalid'
-WHERE @cargar_ejemplos;
+WHERE @cargar_ejemplos
+ AND NOT EXISTS (SELECT 1 FROM proveedores WHERE nombre = 'DEMO - Proveedor de oficina');
 INSERT INTO proveedores (nombre, telefono, correo)
 SELECT 'DEMO - Proveedor de suministros', NULL, 'suministros@example.invalid'
-WHERE @cargar_ejemplos;
+WHERE @cargar_ejemplos
+ AND NOT EXISTS (SELECT 1 FROM proveedores WHERE nombre = 'DEMO - Proveedor de suministros');
 
 -- Un solo producto; su stock debe aumentar únicamente mediante entradas reales.
 -- Se buscan los catálogos por nombre y no se presuponen IDs autoincrementales.
@@ -83,14 +91,15 @@ SELECT 'DEMO-001', 'Producto de ejemplo',
  0, 5, c.id, m.id, 1
 FROM categorias c CROSS JOIN marcas m
 WHERE @cargar_ejemplos
+ AND NOT EXISTS (SELECT 1 FROM productos WHERE codigo = 'DEMO-001')
  AND c.nombre = 'DEMO - Papelería' AND m.nombre = 'DEMO - Genérica';
 
 -- CUENTAS INICIALES OPCIONALES.
 -- El generador privado antepone estas variables con hashes BCrypt. Nunca hay
 -- contraseñas universales, texto plano ni hashes de acceso fijos en el repositorio.
--- Se crean ambas cuentas juntas solo si usuarios está vacía y ambos hashes son válidos.
-SET @cargar_usuarios = NOT EXISTS (SELECT 1 FROM usuarios)
- AND COALESCE(@usuario_admin_inicial, '') REGEXP '^[a-zA-Z0-9._-]{3,60}$'
+-- Cada cuenta se crea solo si falta su username; no se cambian claves, roles ni estados.
+SET @cargar_usuarios =
+ COALESCE(@usuario_admin_inicial, '') REGEXP '^[a-zA-Z0-9._-]{3,60}$'
  AND COALESCE(@usuario_bodeguero_inicial, '') REGEXP '^[a-zA-Z0-9._-]{3,60}$'
  AND LOWER(@usuario_admin_inicial) <> LOWER(@usuario_bodeguero_inicial)
  AND CHAR_LENGTH(COALESCE(@hash_admin_inicial, '')) = 60
@@ -100,14 +109,18 @@ SET @cargar_usuarios = NOT EXISTS (SELECT 1 FROM usuarios)
 
 INSERT INTO usuarios (username, password, rol, estado)
 SELECT @usuario_admin_inicial, @hash_admin_inicial, 'ADMIN', 1
-WHERE @cargar_usuarios;
+WHERE @cargar_usuarios
+ AND NOT EXISTS (SELECT 1 FROM usuarios
+  WHERE username = CONVERT(@usuario_admin_inicial USING utf8mb4) COLLATE utf8mb4_unicode_ci);
 INSERT INTO usuarios (username, password, rol, estado)
 SELECT @usuario_bodeguero_inicial, @hash_bodeguero_inicial, 'BODEGUERO', 1
-WHERE @cargar_usuarios;
+WHERE @cargar_usuarios
+ AND NOT EXISTS (SELECT 1 FROM usuarios
+  WHERE username = CONVERT(@usuario_bodeguero_inicial USING utf8mb4) COLLATE utf8mb4_unicode_ci);
 
 -- El historial comienza vacío: cantidad > 0 y stock inicial 0 impiden inventar entradas.
 COMMIT;
 
-SET @cargar_ejemplos = NULL, @cargar_usuarios = NULL;
+SET @cargar_ejemplos = NULL, @cargar_usuarios = NULL, @completar_ejemplos_iniciales = NULL;
 SET @usuario_admin_inicial = NULL, @hash_admin_inicial = NULL,
  @usuario_bodeguero_inicial = NULL, @hash_bodeguero_inicial = NULL;

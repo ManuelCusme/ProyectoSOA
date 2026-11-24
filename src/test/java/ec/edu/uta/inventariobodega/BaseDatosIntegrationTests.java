@@ -575,6 +575,50 @@ class BaseDatosIntegrationTests {
   }
 
   @Test
+  void importacionCompletaUsuarioFaltanteSinCambiarAdministrador() {
+    String hashAdministrador = usuarios.findById(adminId).orElseThrow().getPassword();
+    String hashImportacion = encoder.encode(CLAVE);
+    jdbc.update("DELETE FROM usuarios WHERE id=?", inactivoId);
+    inactivoId = null;
+    try {
+      for (int intento = 0; intento < 2; intento++) {
+        jdbc.execute(
+            (org.springframework.jdbc.core.ConnectionCallback<Void>)
+                conexion -> {
+                  try (var variables =
+                      conexion.prepareStatement(
+                          "SET @usuario_admin_inicial=?, @hash_admin_inicial=?,"
+                              + " @usuario_bodeguero_inicial=?, @hash_bodeguero_inicial=?,"
+                              + " @completar_ejemplos_iniciales=NULL")) {
+                    variables.setString(1, admin);
+                    variables.setString(2, hashImportacion);
+                    variables.setString(3, inactivo);
+                    variables.setString(4, hashImportacion);
+                    variables.execute();
+                  }
+                  org.springframework.jdbc.datasource.init.ScriptUtils.executeSqlScript(
+                      conexion, new org.springframework.core.io.ClassPathResource("schema.sql"));
+                  return null;
+                });
+        Usuario administrador = usuarios.findById(adminId).orElseThrow();
+        assertThat(administrador.getPassword()).isEqualTo(hashAdministrador);
+        assertThat(administrador.getRol()).isEqualTo(Rol.ADMIN);
+        assertThat(administrador.getEstado()).isTrue();
+        Usuario nuevo = usuarios.findByUsername(inactivo).orElseThrow();
+        assertThat(nuevo.getRol()).isEqualTo(Rol.BODEGUERO);
+        assertThat(nuevo.getEstado()).isTrue();
+        assertThat(encoder.matches(CLAVE, nuevo.getPassword())).isTrue();
+        assertThat(
+                jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM usuarios WHERE username=?", Long.class, inactivo))
+            .isEqualTo(1L);
+      }
+    } finally {
+      inactivoId = usuarios.findByUsername(inactivo).map(Usuario::getId).orElse(null);
+    }
+  }
+
+  @Test
   void entradasNoSePuedenEditarNiEliminar() throws Exception {
     servicio.registrar(form(5), admin);
     mvc.perform(
